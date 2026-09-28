@@ -7,7 +7,16 @@ import AdminBackoffice from './components/AdminBackoffice';
 
 function App() {
   const [currentView, setCurrentView] = useState('home'); // 'home', 'auth', 'dashboard', 'admin'
-  const [currentUser, setCurrentUser] = useState(null); // Empezamos sin sesión iniciada
+  
+  // Mantenemos la sesión activa leyendo de localStorage
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('viabihogar_current_session');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
   
   // Estado global de pesos ponderados
   const [weights, setWeights] = useState({
@@ -18,15 +27,26 @@ function App() {
     areasVerdes: 20
   });
 
-  // CONTROLADOR DE NAVEGACIÓN SEGURO (Rutas Protegidas)
+  // CONTROLADOR DE NAVEGACIÓN SEGURO
   const handleNavChange = (view) => {
-    // Si intenta entrar a dashboard o admin sin estar logueado, redirigir a auth
     if ((view === 'dashboard' || view === 'admin') && !currentUser) {
-      alert('⚠️ Acceso restringido. Debes iniciar sesión para ingresar al comparador o al backoffice.');
+      alert('⚠️ Acceso restringido. Debes iniciar sesión para ingresar.');
       setCurrentView('auth');
       return;
     }
     setCurrentView(view);
+  };
+
+  const handleLoginSuccess = (user) => {
+    setCurrentUser(user);
+    localStorage.setItem('viabihogar_current_session', JSON.stringify(user));
+    setCurrentView('dashboard');
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('viabihogar_current_session');
+    setCurrentView('home');
   };
 
   return (
@@ -36,15 +56,18 @@ function App() {
         currentView={currentView} 
         setCurrentView={handleNavChange} 
         currentUser={currentUser} 
-        onLogout={() => { setCurrentUser(null); setCurrentView('home'); }} 
+        onLogout={handleLogout} 
       />
 
       {currentView === 'home' && (
-        <HomeLanding onExplore={() => handleNavChange('dashboard')} />
+        <HomeLanding 
+          onExplore={() => handleNavChange('dashboard')} 
+          onLoginClick={() => setCurrentView('auth')} 
+        />
       )}
 
       {currentView === 'auth' && (
-        <LoginModal onLoginSuccess={(user) => { setCurrentUser(user); setCurrentView('dashboard'); }} />
+        <LoginModal onLoginSuccess={handleLoginSuccess} />
       )}
 
       {currentView === 'dashboard' && currentUser && (
