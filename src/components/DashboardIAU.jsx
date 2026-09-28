@@ -4,114 +4,126 @@ import { calculateDistanceInMeters } from '../utils/geoCalculator';
 import { calculateIAU } from '../utils/iauCalculator';
 
 export default function DashboardIAU({ weights }) {
-  const [calcMode, setCalcMode] = useState('preset');
+  // Estado para el proyecto real seleccionado de la lista
   const [selectedProjectKey, setSelectedProjectKey] = useState("Residencial Alameda (Lima Centro)");
-  const [customCoords, setCustomCoords] = useState({ lat: -12.0553, lng: -77.0382 });
 
+  // Obtenemos las coordenadas del proyecto elegido
+  const currentProj = realProjects[selectedProjectKey];
+
+  // Calculamos automáticamente la distancia real en metros a cada servicio urbano
   let activeDistances = {};
-  if (calcMode === 'preset') {
-    const proj = realProjects[selectedProjectKey];
-    for (const [service, coords] of Object.entries(urbanServicesCoords)) {
-      activeDistances[service] = calculateDistanceInMeters(proj.lat, proj.lng, coords.lat, coords.lng);
-    }
-  } else {
-    for (const [service, coords] of Object.entries(urbanServicesCoords)) {
-      activeDistances[service] = calculateDistanceInMeters(customCoords.lat, customCoords.lng, coords.lat, coords.lng);
-    }
+  for (const [service, coords] of Object.entries(urbanServicesCoords)) {
+    activeDistances[service] = calculateDistanceInMeters(currentProj.lat, currentProj.lng, coords.lat, coords.lng);
   }
 
+  // Calculamos el IVU final basado en los pesos configurados
   const result = calculateIAU(activeDistances, weights);
 
   return (
-    <main className="max-w-7xl mx-auto px-6 py-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
+    <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
+      
+      {/* Cabecera del Módulo */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <span className="text-xs font-bold text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full">Geolocalización Activa</span>
-          <h1 className="text-3xl font-black text-slate-900 mt-2">Comparador Geográfico IVU</h1>
-          <p className="text-slate-600 text-sm">Cálculo de distancias mediante Haversine y coordenadas de mapas.</p>
-        </div>
-        
-        <div className="flex gap-2 bg-white p-1.5 rounded-2xl border border-slate-200">
-          <button onClick={() => setCalcMode('preset')} className={`px-4 py-2 rounded-xl text-xs font-bold ${calcMode === 'preset' ? 'bg-emerald-950 text-white' : 'text-slate-600'}`}>
-            Proyectos Reales
-          </button>
-          <button onClick={() => setCalcMode('mapCoord')} className={`px-4 py-2 rounded-xl text-xs font-bold ${calcMode === 'mapCoord' ? 'bg-emerald-950 text-white' : 'text-slate-600'}`}>
-            📍 Coordenadas Libres
-          </button>
+          <span className="text-xs font-bold text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full">Catálogo Oficial Inmobiliario</span>
+          <h1 className="text-3xl font-black text-slate-900 mt-2">Selecciona un Proyecto para Evaluar</h1>
+          <p className="text-slate-600 text-sm">El sistema calcula de forma automática la viabilidad urbana (IVU) basada en su ubicación geográfica real.</p>
         </div>
       </div>
 
-      {calcMode === 'preset' ? (
-        <div className="mb-8 flex flex-wrap gap-3 items-center bg-white p-4 rounded-2xl border border-slate-200">
-          <span className="text-xs font-bold text-slate-500 uppercase">Seleccionar Inmobiliaria:</span>
-          {Object.keys(realProjects).map(key => (
-            <button key={key} onClick={() => setSelectedProjectKey(key)} className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${selectedProjectKey === key ? 'bg-emerald-950 text-white shadow-md' : 'bg-slate-100 text-slate-700'}`}>
-              {key}
+      {/* Selector de Proyectos Reales en Tarjetas o Botones */}
+      <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Proyectos Disponibles para Comparación</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {Object.entries(realProjects).map(([key, proj]) => (
+            <button
+              key={key}
+              onClick={() => setSelectedProjectKey(key)}
+              className={`p-5 rounded-2xl border text-left transition-all flex flex-col justify-between ${
+                selectedProjectKey === key 
+                  ? 'bg-emerald-950 text-white border-emerald-950 shadow-lg scale-[1.02]' 
+                  : 'bg-slate-50 text-slate-800 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <div>
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md uppercase ${selectedProjectKey === key ? 'bg-emerald-900 text-emerald-200' : 'bg-slate-200 text-slate-700'}`}>
+                  Verificado Mivivienda
+                </span>
+                <h4 className="font-extrabold text-base mt-3">{key}</h4>
+                <p className={`text-xs mt-1 ${selectedProjectKey === key ? 'text-emerald-300' : 'text-slate-500'}`}>{proj.direccion}</p>
+              </div>
+              <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center text-xs font-bold">
+                <span>Ver evaluación →</span>
+              </div>
             </button>
           ))}
         </div>
-      ) : (
-        <div className="mb-8 bg-emerald-50 border border-emerald-200 p-6 rounded-3xl space-y-4">
-          <h3 className="font-black text-emerald-950 text-base">📍 Ingresar Latitud y Longitud</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Latitud</label>
-              <input type="number" step="0.0001" value={customCoords.lat} onChange={e => setCustomCoords({...customCoords, lat: parseFloat(e.target.value)||0})} className="w-full bg-white border rounded-xl px-3 py-2 text-sm font-bold" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Longitud</label>
-              <input type="number" step="0.0001" value={customCoords.lng} onChange={e => setCustomCoords({...customCoords, lng: parseFloat(e.target.value)||0})} className="w-full bg-white border rounded-xl px-3 py-2 text-sm font-bold" />
-            </div>
-          </div>
-        </div>
-      )}
+      </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col justify-between">
-          <span className="text-xs font-bold text-slate-400 uppercase">Ubicación</span>
-          <p className="text-xl font-black text-slate-900 my-2">{calcMode === 'preset' ? selectedProjectKey : "Personalizado"}</p>
+      {/* Tarjetas KPI de Resultados del Proyecto Seleccionado */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between">
+          <span className="text-xs font-bold text-slate-400 uppercase">Proyecto Activo</span>
+          <p className="text-lg font-black text-slate-900 my-2">{selectedProjectKey}</p>
+          <span className="text-xs text-emerald-800 font-bold bg-emerald-50 px-2 py-1 rounded w-fit">Inscrito en BBP</span>
         </div>
-        <div className={`p-6 rounded-3xl border border-slate-200 flex flex-col justify-between ${result.iauInterpretation.bg}`}>
-          <span className="text-xs font-bold uppercase tracking-wider opacity-70">IVU Final</span>
-          <p className={`text-5xl font-black ${result.iauInterpretation.color}`}>{result.iauScore} <span className="text-sm">/100</span></p>
+
+        <div className={`p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between ${result.iauInterpretation.bg}`}>
+          <span className="text-xs font-bold uppercase tracking-wider opacity-70">Índice IVU Final</span>
+          <div className="flex items-baseline gap-2 my-1">
+            <p className={`text-5xl font-black ${result.iauInterpretation.color}`}>{result.iauScore}</p>
+            <span className="text-sm font-bold opacity-60">/ 100</span>
+          </div>
           <p className={`text-xs font-bold ${result.iauInterpretation.color}`}>{result.iauInterpretation.level}</p>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col justify-between">
-          <span className="text-xs font-bold text-slate-400 uppercase">Factor Cercano</span>
+
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between">
+          <span className="text-xs font-bold text-slate-400 uppercase">Factor Más Favorable</span>
           <p className="text-lg font-extrabold text-emerald-800 my-1">{result.highestFactor.name}</p>
+          <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded w-fit">{result.highestFactor.score} pts Normalizados</span>
         </div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col justify-between">
-          <span className="text-xs font-bold text-slate-400 uppercase">Factor Lejano</span>
+
+        <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between">
+          <span className="text-xs font-bold text-slate-400 uppercase">Factor Crítico (A mejorar)</span>
           <p className="text-lg font-extrabold text-rose-600 my-1">{result.lowestFactor.name}</p>
+          <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded w-fit">{result.lowestFactor.score} pts Normalizados</span>
         </div>
       </div>
 
-      {/* Desglose */}
-      <h2 className="text-xl font-extrabold text-slate-900 mb-4">Desglose de Distancias Geográficas</h2>
+      {/* Desglose Metodológico de Factores y Distancias */}
+      <h2 className="text-xl font-extrabold text-slate-900">Desglose de Servicios Urbanos Cercanos</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {Object.values(result.factorDetails).map(factor => (
           <div key={factor.name} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
             <div className="flex justify-between items-start">
-              <h4 className="font-extrabold text-slate-900">{factor.name}</h4>
-              <span className="bg-emerald-50 text-emerald-900 font-black text-xs px-3 py-1 rounded-xl border">~{factor.distance} m</span>
+              <h4 className="font-extrabold text-slate-900 text-base">{factor.name}</h4>
+              <span className="bg-emerald-50 text-emerald-900 font-black text-xs px-3 py-1 rounded-xl border border-emerald-200">
+                ~{factor.distance} metros
+              </span>
             </div>
+
             <div>
-              <div className="flex justify-between text-xs mb-1 text-slate-500">
+              <div className="flex justify-between text-xs font-semibold mb-1 text-slate-500">
                 <span>Puntaje Escala</span>
-                <span className="font-bold text-slate-800">{factor.score} / 100</span>
+                <span className="text-slate-800 font-bold">{factor.score} / 100</span>
               </div>
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                <div className="bg-emerald-800 h-full rounded-full" style={{ width: `${factor.score}%` }}></div>
+                <div className="bg-emerald-800 h-full rounded-full transition-all duration-500" style={{ width: `${factor.score}%` }}></div>
               </div>
             </div>
-            <div className="pt-2 border-t flex justify-between text-xs">
-              <span className="text-slate-500">Peso: {factor.weightPercent}%</span>
-              <span className="text-emerald-900 font-black">Aporte: {factor.ponderado} pts</span>
+
+            <div className="pt-3 border-t border-slate-100 flex justify-between text-xs">
+              <span className="text-slate-500">Peso: <strong>{factor.weightPercent}%</strong></span>
+              <span className="text-emerald-900 font-black text-sm">Aporte: {factor.ponderado} pts</span>
+            </div>
+
+            <div className="text-xs bg-[#F9F8F6] p-3 rounded-2xl border border-slate-100 text-slate-600">
+              <strong>Rango Aplicado:</strong> {factor.range} ({factor.level})
             </div>
           </div>
         ))}
       </div>
+
     </main>
   );
 }
