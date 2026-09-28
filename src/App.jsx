@@ -1,25 +1,29 @@
 import React, { useState } from 'react';
 import { calculateIAU } from './utils/iauCalculator';
-import { mockProjects } from './data/excelData';
+import { realProjects, urbanServicesCoords } from './data/excelData';
+import { calculateDistanceInMeters } from './utils/geoCalculator';
 
 function App() {
   const [currentView, setCurrentView] = useState('home'); 
-  const [selectedProject, setSelectedProject] = useState("Proyecto A");
+  const [selectedProjectKey, setSelectedProjectKey] = useState("Residencial Alameda (Lima Centro)");
   
-  // Base de datos simulada en memoria para usuarios registrados
-  const [registeredUsers, setRegisteredUsers] = useState([
-    { email: 'admin@viabihogar.pe', password: 'password123', role: 'Administrador' }
-  ]);
+  // Modo de cálculo: 'preset' (proyectos reales predefinidos) o 'mapCoord' (ingresando lat/lng de Google Maps)
+  const [calcMode, setCalcMode] = useState('preset');
+  
+  // Coordenadas manuales para probar Google Maps
+  const [customCoords, setCustomCoords] = useState({
+    lat: -12.0553,
+    lng: -77.0382,
+    nombre: "Proyecto Personalizado"
+  });
 
-  // Estados de Autenticación
-  const [authMode, setAuthMode] = useState('login'); // 'login', 'register'
-  const [emailInput, setEmailInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [currentUser, setCurrentUser] = useState(null);
+  // Autenticación simulada/validada
+  const [currentUser, setCurrentUser] = useState({ email: 'urbanista@viabihogar.pe', role: 'Urbanista Evaluador' });
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPass, setAuthPass] = useState('');
   const [authError, setAuthError] = useState('');
-  const [authSuccess, setAuthSuccess] = useState('');
 
-  // Pesos configurables (Ponderaciones del IVU)
+  // Pesos del IVU
   const [weights, setWeights] = useState({
     transporte: 20,
     educacion: 20,
@@ -28,70 +32,38 @@ function App() {
     areasVerdes: 20
   });
 
-  const result = calculateIAU(mockProjects[selectedProject], weights);
+  // Calcular distancias reales mediante Haversine si estamos en modo coordenadas
+  let activeDistances = {};
+  if (calcMode === 'preset') {
+    const proj = realProjects[selectedProjectKey];
+    // Calculamos la distancia real en metros desde las coordenadas del proyecto hacia cada servicio urbano
+    for (const [service, coords] of Object.entries(urbanServicesCoords)) {
+      activeDistances[service] = calculateDistanceInMeters(proj.lat, proj.lng, coords.lat, coords.lng);
+    }
+  } else {
+    for (const [service, coords] of Object.entries(urbanServicesCoords)) {
+      activeDistances[service] = calculateDistanceInMeters(customCoords.lat, customCoords.lng, coords.lat, coords.lng);
+    }
+  }
 
-  const handleWeightChange = (factor, val) => {
-    setWeights({
-      ...weights,
-      [factor]: parseFloat(val) || 0
-    });
-  };
-
+  const result = calculateIAU(activeDistances, weights);
   const totalWeightSum = Object.values(weights).reduce((a, b) => a + b, 0);
 
-  // VALIDACIÓN REAL DE CREDENCIALES
-  const handleAuthSubmit = (e) => {
+  const handleLogin = (e) => {
     e.preventDefault();
-    setAuthError('');
-    setAuthSuccess('');
-
-    // Validar formato de correo básico
-    if (!emailInput.includes('@') || !emailInput.includes('.')) {
-      setAuthError('Por favor ingresa un correo electrónico válido.');
-      return;
-    }
-
-    // Validar longitud de contraseña
-    if (passwordInput.length < 6) {
-      setAuthError('La contraseña debe tener al menos 6 caracteres.');
-      return;
-    }
-
-    if (authMode === 'register') {
-      // Verificar si el usuario ya existe
-      const existingUser = registeredUsers.find(u => u.email === emailInput);
-      if (existingUser) {
-        setAuthError('Este correo ya está registrado. Inicia sesión.');
-        return;
-      }
-
-      // Registrar nuevo usuario
-      const newUser = { email: emailInput, password: passwordInput, role: 'Urbanista' };
-      setRegisteredUsers([...registeredUsers, newUser]);
-      setAuthSuccess('¡Cuenta creada con éxito! Ahora puedes iniciar sesión.');
-      setAuthMode('login');
-      setPasswordInput('');
+    if (authEmail && authPass.length >= 6) {
+      setCurrentUser({ email: authEmail, role: 'Urbanista' });
+      setCurrentView('dashboard');
+      setAuthError('');
     } else {
-      // Validar Login
-      const validUser = registeredUsers.find(
-        u => u.email === emailInput && u.password === passwordInput
-      );
-
-      if (validUser) {
-        setCurrentUser(validUser);
-        setEmailInput('');
-        setPasswordInput('');
-        setCurrentView('dashboard');
-      } else {
-        setAuthError('Correo o contraseña incorrectos. Verifica tus datos.');
-      }
+      setAuthError('Correo válido y contraseña de mín. 6 caracteres requeridos.');
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7] text-[#1A2E22] font-sans antialiased selection:bg-emerald-200">
+    <div className="min-h-screen bg-[#FDFBF7] text-[#1A2E22] font-sans antialiased">
       
-      {/* NAVBAR SUPERIOR INSTITUCIONAL */}
+      {/* NAVBAR */}
       <header className="bg-white/95 backdrop-blur-md border-b border-emerald-950/10 px-6 lg:px-12 py-4 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-8">
           <button onClick={() => setCurrentView('home')} className="flex items-center gap-2 font-black text-xl tracking-tight text-emerald-950">
@@ -99,197 +71,137 @@ function App() {
           </button>
           
           <nav className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-600">
-            <button onClick={() => setCurrentView('home')} className="hover:text-emerald-900 transition-colors">Buscar Proyectos</button>
-            <button onClick={() => setCurrentView('dashboard')} className="hover:text-emerald-900 transition-colors">Comparador IVU</button>
+            <button onClick={() => setCurrentView('home')} className="hover:text-emerald-900 transition-colors">Inicio</button>
+            <button onClick={() => setCurrentView('dashboard')} className="hover:text-emerald-900 transition-colors">Comparador IVU & Mapas</button>
             <span className="text-emerald-950/20">|</span>
-            <span className="text-xs bg-emerald-100 text-emerald-900 px-3 py-1 rounded-full font-extrabold">Perú 2026</span>
+            <span className="text-xs bg-emerald-100 text-emerald-900 px-3 py-1 rounded-full font-extrabold">Geolocalización Activa</span>
           </nav>
         </div>
 
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => setCurrentView('admin')}
-            className="flex items-center gap-1.5 text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl transition-all border border-slate-200 shadow-xs"
-          >
+          <button onClick={() => setCurrentView('admin')} className="text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl transition-all border border-slate-200">
             ⚙️ Backoffice
           </button>
-          
           {currentUser ? (
             <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 px-4 py-2 rounded-xl">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse"></span>
+              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
               <span className="text-xs font-bold text-emerald-950">{currentUser.email}</span>
-              <button onClick={() => { setCurrentUser(null); setCurrentView('home'); }} className="text-xs text-rose-600 font-extrabold ml-2 hover:underline">Salir</button>
+              <button onClick={() => setCurrentUser(null)} className="text-xs text-rose-600 font-extrabold ml-2 hover:underline">Salir</button>
             </div>
           ) : (
-            <button onClick={() => setCurrentView('auth')} className="bg-emerald-900 hover:bg-emerald-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl transition-all shadow-sm">
+            <button onClick={() => setCurrentView('auth')} className="bg-emerald-900 hover:bg-emerald-800 text-white text-xs font-bold px-5 py-2.5 rounded-xl shadow-sm">
               Iniciar sesión
             </button>
           )}
         </div>
       </header>
 
-      {/* VISTA 1: HOME */}
+      {/* HOME */}
       {currentView === 'home' && (
-        <main>
-          <section className="bg-emerald-950 text-white py-20 px-6 md:px-12 lg:px-24 relative overflow-hidden">
-            <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:16px_16px]"></div>
-            
-            <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center relative z-10">
-              <div className="lg:col-span-7 space-y-6">
-                <span className="bg-emerald-900/80 text-emerald-300 text-xs font-bold px-3.5 py-1.5 rounded-full uppercase tracking-wider border border-emerald-800">
-                  Plataforma Verificada • Fondo Mivivienda
-                </span>
-                <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-[1.1]">
-                  Tu primera vivienda, <br/><span className="text-emerald-400">sin letra pequeña.</span>
-                </h1>
-                <p className="text-emerald-100/80 text-base md:text-lg max-w-xl font-normal leading-relaxed">
-                  Analiza la viabilidad urbana real mediante distancias a servicios, calcula tus bonos habitacionales y toma la decisión más inteligente.
-                </p>
-                <div className="flex flex-wrap gap-4 pt-2">
-                  <button onClick={() => setCurrentView('dashboard')} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-7 py-4 rounded-2xl transition-all shadow-xl">
-                    🔍 Explorar proyectos
-                  </button>
-                  <button onClick={() => setCurrentView('dashboard')} className="bg-emerald-900/60 hover:bg-emerald-900 text-white font-bold px-7 py-4 rounded-2xl transition-all border border-emerald-700/50">
-                    📊 Verificador IVU
-                  </button>
-                </div>
-              </div>
-
-              {/* Formulario rápido Home */}
-              <div className="lg:col-span-5 bg-white text-slate-900 p-8 rounded-3xl shadow-2xl border border-slate-100">
-                <h2 className="text-xl font-black mb-1">Encuentra tu vivienda ideal</h2>
-                <p className="text-xs text-slate-500 mb-6">Regístrate para guardar tus comparaciones de proyectos.</p>
-                
-                <form onSubmit={(e) => { e.preventDefault(); setCurrentView('auth'); }} className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Correo electrónico</label>
-                    <input type="email" placeholder="tucorreo@gmail.com" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700 font-medium" required />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Teléfono / WhatsApp</label>
-                    <input type="text" placeholder="987 654 321" className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-700 font-medium" required />
-                  </div>
-                  <button type="submit" className="w-full bg-emerald-950 hover:bg-emerald-900 text-white font-black py-4 rounded-xl transition-all shadow-lg text-sm mt-2">
-                    Continuar al sistema →
-                  </button>
-                </form>
-              </div>
+        <main className="bg-emerald-950 text-white py-20 px-6 md:px-12 lg:px-24">
+          <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+            <div className="lg:col-span-7 space-y-6">
+              <span className="bg-emerald-900 text-emerald-300 text-xs font-bold px-3.5 py-1.5 rounded-full uppercase tracking-wider border border-emerald-800">
+                Geolocalización con Google Maps & OpenStreetMap
+              </span>
+              <h1 className="text-4xl md:text-6xl font-black tracking-tight leading-[1.1]">
+                Evaluación urbana con <br/><span className="text-emerald-400">coordenadas reales.</span>
+              </h1>
+              <p className="text-emerald-100/80 text-base md:text-lg max-w-xl">
+                Calcula automáticamente las distancias reales a hospitales, escuelas y transporte público usando latitud y longitud.
+              </p>
+              <button onClick={() => setCurrentView('dashboard')} className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold px-7 py-4 rounded-2xl shadow-xl transition-all">
+                🗺️ Ir al Comparador Geográfico →
+              </button>
             </div>
-          </section>
+          </div>
         </main>
       )}
 
-      {/* VISTA AUTH: LOGIN REAL CON VALIDACIÓN */}
+      {/* AUTH */}
       {currentView === 'auth' && (
         <main className="max-w-md mx-auto px-6 py-16">
           <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-xl space-y-6">
-            <div className="text-center">
-              <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full">Seguridad Verificada</span>
-              <h2 className="text-2xl font-black text-slate-900 mt-2">
-                {authMode === 'login' ? 'Iniciar Sesión' : 'Crear Cuenta Nueva'}
-              </h2>
-              <p className="text-xs text-slate-500 mt-1">
-                {authMode === 'login' ? 'Ingresa tus credenciales autorizadas.' : 'Regístrate con un correo y contraseña segura.'}
-              </p>
-            </div>
-
-            {/* Mensajes de error o éxito */}
-            {authError && (
-              <div className="bg-rose-50 text-rose-700 p-3.5 rounded-2xl text-xs font-bold border border-rose-200 text-center">
-                ⚠️ {authError}
-              </div>
-            )}
-            {authSuccess && (
-              <div className="bg-emerald-50 text-emerald-800 p-3.5 rounded-2xl text-xs font-bold border border-emerald-200 text-center">
-                ✅ {authSuccess}
-              </div>
-            )}
-
-            <form onSubmit={handleAuthSubmit} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Correo electrónico</label>
-                <input 
-                  type="email" 
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  placeholder="ejemplo@viabihogar.pe" 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-700" 
-                  required 
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Contraseña (mín. 6 caracteres)</label>
-                <input 
-                  type="password" 
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="••••••••" 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-700" 
-                  required 
-                />
-              </div>
-
-              <button type="submit" className="w-full bg-emerald-950 hover:bg-emerald-900 text-white font-black py-3.5 rounded-xl transition-all shadow-md text-sm mt-2">
-                {authMode === 'login' ? 'Ingresar al Sistema' : 'Registrar Cuenta'}
-              </button>
+            <h2 className="text-2xl font-black text-slate-900 text-center">Acceso al Sistema</h2>
+            {authError && <div className="bg-rose-50 text-rose-700 p-3 rounded-xl text-xs font-bold">{authError}</div>}
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input type="email" value={authEmail} onChange={e=>setAuthEmail(e.target.value)} placeholder="correo@viabihogar.pe" className="w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm" required />
+              <input type="password" value={authPass} onChange={e=>setAuthPass(e.target.value)} placeholder="Contraseña (mín 6)" className="w-full bg-slate-50 border rounded-xl px-4 py-3 text-sm" required />
+              <button type="submit" className="w-full bg-emerald-950 text-white font-black py-3.5 rounded-xl">Ingresar</button>
             </form>
-
-            <div className="text-center pt-2 border-t border-slate-100">
-              <button 
-                onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); setAuthSuccess(''); }}
-                className="text-xs font-bold text-emerald-800 hover:underline"
-              >
-                {authMode === 'login' ? '¿No tienes cuenta? Regístrate aquí' : '¿Ya tienes cuenta? Inicia sesión'}
-              </button>
-              
-              {authMode === 'login' && (
-                <p className="text-[11px] text-slate-400 mt-3">
-                  💡 Credencial de prueba por defecto:<br/>
-                  <strong className="text-slate-600">admin@viabihogar.pe</strong> / <strong className="text-slate-600">password123</strong>
-                </p>
-              )}
-            </div>
           </div>
         </main>
       )}
 
-      {/* VISTA 2: DASHBOARD COMPARADOR IVU */}
+      {/* DASHBOARD CON GEOLOCALIZACIÓN */}
       {currentView === 'dashboard' && (
         <main className="max-w-7xl mx-auto px-6 py-8">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
             <div>
-              <span className="text-xs font-bold text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full">Módulo Analítico IVU</span>
-              <h1 className="text-3xl font-black text-slate-900 mt-2">Comparador de Proyectos Inmobiliarios</h1>
-              <p className="text-slate-600 text-sm">Normalización algorítmica por rangos urbanos oficiales.</p>
+              <span className="text-xs font-bold text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full">Motor Geográfico Activo</span>
+              <h1 className="text-3xl font-black text-slate-900 mt-2">Comparador de Proyectos & Coordenadas</h1>
+              <p className="text-slate-600 text-sm">Distancias calculadas matemáticamente desde latitud y longitud.</p>
             </div>
-            <div className="flex gap-2 bg-white p-1.5 rounded-2xl border border-slate-200 shadow-xs">
-              {Object.keys(mockProjects).map(proj => (
-                <button
-                  key={proj}
-                  onClick={() => setSelectedProject(proj)}
-                  className={`px-5 py-2 rounded-xl font-bold text-sm transition-all ${
-                    selectedProject === proj 
-                      ? 'bg-emerald-950 text-white shadow-md' 
-                      : 'text-slate-600 hover:bg-slate-100'
-                  }`}
-                >
-                  {proj}
-                </button>
-              ))}
+            
+            <div className="flex gap-2 bg-white p-1.5 rounded-2xl border border-slate-200">
+              <button onClick={() => setCalcMode('preset')} className={`px-4 py-2 rounded-xl text-xs font-bold ${calcMode === 'preset' ? 'bg-emerald-950 text-white' : 'text-slate-600'}`}>
+                Proyectos Reales (Lima)
+              </button>
+              <button onClick={() => setCalcMode('mapCoord')} className={`px-4 py-2 rounded-xl text-xs font-bold ${calcMode === 'mapCoord' ? 'bg-emerald-950 text-white' : 'text-slate-600'}`}>
+                📍 Ingresar Coordenadas Google Maps
+              </button>
             </div>
           </div>
 
-          {/* Tarjetas KPI */}
+          {/* Selectores según el modo */}
+          {calcMode === 'preset' ? (
+            <div className="mb-8 flex flex-wrap gap-3 items-center bg-white p-4 rounded-2xl border border-slate-200">
+              <span className="text-xs font-bold text-slate-500 uppercase">Seleccionar Inmobiliaria:</span>
+              {Object.keys(realProjects).map(key => (
+                <button
+                  key={key}
+                  onClick={() => setSelectedProjectKey(key)}
+                  className={`px-4 py-2 rounded-xl font-bold text-sm transition-all ${
+                    selectedProjectKey === key ? 'bg-emerald-950 text-white shadow-md' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  {key}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="mb-8 bg-emerald-50 border border-emerald-200 p-6 rounded-3xl space-y-4">
+              <h3 className="font-black text-emerald-950 text-base">📍 Pegar Coordenadas de Google Maps</h3>
+              <p className="text-xs text-emerald-800">Haz clic derecho en cualquier punto de Google Maps, copia la latitud y longitud (ej. -12.0464, -77.0428) y pégalas aquí para calcular el IVU al instante:</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Latitud</label>
+                  <input type="number" step="0.0001" value={customCoords.lat} onChange={e => setCustomCoords({...customCoords, lat: parseFloat(e.target.value)})} className="w-full bg-white border rounded-xl px-3 py-2 text-sm font-bold" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase mb-1">Longitud</label>
+                  <input type="number" step="0.0001" value={customCoords.lng} onChange={e => setCustomCoords({...customCoords, lng: parseFloat(e.target.value)})} className="w-full bg-white border rounded-xl px-3 py-2 text-sm font-bold" />
+                </div>
+                <div className="flex items-end">
+                  <span className="text-xs font-bold text-emerald-900 bg-emerald-200/60 p-2.5 rounded-xl w-full text-center">
+                    ✨ Distancias calculadas en vivo
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* KPIs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Proyecto Activo</span>
-              <p className="text-2xl font-black text-slate-900 my-2">{selectedProject}</p>
-              <span className="text-xs text-emerald-800 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg w-fit">Verificado Mivivienda</span>
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase">Ubicación Activa</span>
+              <p className="text-xl font-black text-slate-900 my-2">{calcMode === 'preset' ? selectedProjectKey : "Coordenadas Personalizadas"}</p>
+              <span className="text-xs text-emerald-800 font-bold bg-emerald-50 px-2.5 py-1 rounded-lg w-fit">Lat: {calcMode === 'preset' ? realProjects[selectedProjectKey].lat : customCoords.lat}</span>
             </div>
 
-            <div className={`p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between ${result.iauInterpretation.bg}`}>
-              <span className="text-xs font-bold uppercase tracking-wider opacity-70">IVU Final Calculado</span>
+            <div className={`p-6 rounded-3xl border border-slate-200 flex flex-col justify-between ${result.iauInterpretation.bg}`}>
+              <span className="text-xs font-bold uppercase tracking-wider opacity-70">IVU Calculado (Geolocalizado)</span>
               <div className="flex items-baseline gap-2 my-1">
                 <p className={`text-5xl font-black ${result.iauInterpretation.color}`}>{result.iauScore}</p>
                 <span className="text-sm font-bold opacity-60">/ 100</span>
@@ -297,34 +209,34 @@ function App() {
               <p className={`text-xs font-bold ${result.iauInterpretation.color}`}>{result.iauInterpretation.level}</p>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Factor Destacado</span>
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase">Factor Más Cercano</span>
               <p className="text-lg font-extrabold text-emerald-800 my-1">{result.highestFactor.name}</p>
-              <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded w-fit">{result.highestFactor.score} pts Normalizados</span>
+              <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded w-fit">{result.highestFactor.score} pts (Normalizado)</span>
             </div>
 
-            <div className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs flex flex-col justify-between">
-              <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Factor Crítico</span>
+            <div className="bg-white p-6 rounded-3xl border border-slate-200 flex flex-col justify-between">
+              <span className="text-xs font-bold text-slate-400 uppercase">Factor Más Lejano</span>
               <p className="text-lg font-extrabold text-rose-600 my-1">{result.lowestFactor.name}</p>
-              <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded w-fit">{result.lowestFactor.score} pts Normalizados</span>
+              <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded w-fit">{result.lowestFactor.score} pts (Normalizado)</span>
             </div>
           </div>
 
-          {/* Desglose */}
-          <h2 className="text-xl font-extrabold text-slate-900 mb-4">Desglose Metodológico de Factores</h2>
+          {/* Desglose de Factores con Distancias Reales en Metros */}
+          <h2 className="text-xl font-extrabold text-slate-900 mb-4">Desglose de Distancias Geográficas Reales</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {Object.values(result.factorDetails).map(factor => (
-              <div key={factor.name} className="bg-white p-6 rounded-3xl border border-slate-200/80 shadow-xs space-y-4">
+              <div key={factor.name} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
                 <div className="flex justify-between items-start">
                   <h4 className="font-extrabold text-slate-900 text-base">{factor.name}</h4>
-                  <span className="bg-slate-100 text-slate-800 font-black text-xs px-3 py-1 rounded-xl">
-                    {factor.distance} m
+                  <span className="bg-emerald-50 text-emerald-900 font-black text-xs px-3 py-1 rounded-xl border border-emerald-200">
+                    ~{factor.distance} metros
                   </span>
                 </div>
 
                 <div>
                   <div className="flex justify-between text-xs font-semibold mb-1 text-slate-500">
-                    <span>Puntaje Escala</span>
+                    <span>Puntaje Escala Normalizada</span>
                     <span className="text-slate-800 font-bold">{factor.score} / 100</span>
                   </div>
                   <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
@@ -338,7 +250,7 @@ function App() {
                 </div>
 
                 <div className="text-xs bg-[#F9F8F6] p-3 rounded-2xl border border-slate-100 text-slate-600">
-                  <strong>Rango:</strong> {factor.range} ({factor.level})
+                  <strong>Rango Aplicado:</strong> {factor.range} ({factor.level})
                 </div>
               </div>
             ))}
@@ -346,47 +258,24 @@ function App() {
         </main>
       )}
 
-      {/* VISTA 3: BACKOFFICE / ADMIN */}
+      {/* ADMIN */}
       {currentView === 'admin' && (
         <main className="max-w-4xl mx-auto px-6 py-8">
           <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm space-y-8">
-            <div>
-              <span className="text-xs font-bold text-amber-800 bg-amber-100 px-3 py-1 rounded-full">Panel de Administración</span>
-              <h1 className="text-2xl font-black text-slate-900 mt-2">Backoffice ViabiHogar • Ponderaciones IVU</h1>
-              <p className="text-slate-600 text-xs">Ajusta los factores de peso para recalcular dinámicamente la viabilidad.</p>
-            </div>
-
-            <div className="space-y-4 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+            <h2 className="text-2xl font-black text-slate-900">Backoffice • Ponderaciones IVU</h2>
+            <div className="space-y-4 bg-slate-50 p-6 rounded-2xl">
               {Object.keys(weights).map(factor => (
-                <div key={factor} className="space-y-2 bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-                  <div className="flex justify-between items-center text-sm font-bold text-slate-800">
-                    <span className="capitalize">{factor === 'transporte' ? 'Transporte y movilidad' : factor === 'areasVerdes' ? 'Áreas verdes' : factor}</span>
-                    <span className="text-emerald-900 bg-emerald-50 px-3 py-1 rounded-xl text-xs">{weights[factor]}%</span>
+                <div key={factor} className="space-y-2 bg-white p-4 rounded-2xl border">
+                  <div className="flex justify-between text-sm font-bold">
+                    <span className="capitalize">{factor}</span>
+                    <span>{weights[factor]}%</span>
                   </div>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="100" 
-                    value={weights[factor]}
-                    onChange={(e) => handleWeightChange(factor, e.target.value)}
-                    className="w-full accent-emerald-900 cursor-pointer"
-                  />
+                  <input type="range" min="0" max="100" value={weights[factor]} onChange={e => setWeights({...weights, [factor]: parseFloat(e.target.value)||0})} className="w-full accent-emerald-900" />
                 </div>
               ))}
-
-              <div className={`p-4 rounded-2xl font-bold text-sm flex justify-between items-center ${Math.abs(totalWeightSum - 100) < 0.01 ? 'bg-emerald-50 text-emerald-900 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
-                <span>Suma total:</span>
-                <span className="text-base font-black">{totalWeightSum}% {Math.abs(totalWeightSum - 100) >= 0.01 && '(Debe sumar 100%)'}</span>
+              <div className="p-4 rounded-2xl font-bold text-sm bg-emerald-50 text-emerald-900 flex justify-between">
+                <span>Suma total:</span><span>{totalWeightSum}%</span>
               </div>
-            </div>
-
-            <div className="flex gap-4">
-              <button onClick={() => alert("¡Configuración guardada con éxito!")} className="bg-emerald-950 hover:bg-emerald-900 text-white font-bold px-6 py-3.5 rounded-xl transition-all shadow-md text-sm">
-                Guardar cambios
-              </button>
-              <button onClick={() => setWeights({ transporte: 20, educacion: 20, salud: 20, comercio: 20, areasVerdes: 20 })} className="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold px-6 py-3.5 rounded-xl transition-all text-sm">
-                Restaurar 20%
-              </button>
             </div>
           </div>
         </main>
