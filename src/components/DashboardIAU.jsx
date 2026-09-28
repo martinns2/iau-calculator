@@ -1,16 +1,24 @@
 import React, { useState } from 'react';
-import { realProjects, urbanServicesCoords } from '../data/excelData';
+import { realProjects } from '../data/excelData';
 import { calculateDistanceInMeters } from '../utils/geoCalculator';
 import { calculateIAU } from '../utils/iauCalculator';
-import UrbanMap from './UrbanMap'; // <--- Importamos el mapa
+import UrbanMap from './UrbanMap';
 
 export default function DashboardIAU({ weights }) {
   const [selectedProjectKey, setSelectedProjectKey] = useState("Residencial Alameda (Lima Centro)");
+  
+  // Obtenemos el proyecto y SUS PROPIOS servicios cercanos
   const currentProj = realProjects[selectedProjectKey];
 
   let activeDistances = {};
-  for (const [service, coords] of Object.entries(urbanServicesCoords)) {
-    activeDistances[service] = calculateDistanceInMeters(currentProj.lat, currentProj.lng, coords.lat, coords.lng);
+  for (const [serviceKey, serviceObj] of Object.entries(currentProj.services)) {
+    // Calculamos la distancia desde el proyecto hacia SU servicio específico
+    activeDistances[serviceKey] = calculateDistanceInMeters(
+      currentProj.lat, 
+      currentProj.lng, 
+      serviceObj.lat, 
+      serviceObj.lng
+    );
   }
 
   const result = calculateIAU(activeDistances, weights);
@@ -20,15 +28,15 @@ export default function DashboardIAU({ weights }) {
       
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <span className="text-xs font-bold text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full">Catálogo Oficial Inmobiliario</span>
-          <h1 className="text-3xl font-black text-slate-900 mt-2">Selector de Proyectos & Mapa</h1>
-          <p className="text-slate-600 text-sm">Visualiza la ubicación exacta y la viabilidad urbana (IVU) calculada al instante.</p>
+          <span className="text-xs font-bold text-emerald-900 bg-emerald-100 px-3 py-1 rounded-full">Evaluación por Proximidad Real</span>
+          <h1 className="text-3xl font-black text-slate-900 mt-2">Comparador Geográfico por Proyecto</h1>
+          <p className="text-slate-600 text-sm">Cada proyecto evalúa los hospitales, colegios y transporte que le corresponden en su entorno.</p>
         </div>
       </div>
 
       {/* Selector de Proyectos */}
       <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Proyectos Disponibles</h3>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Selecciona el Proyecto Inmobiliario</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {Object.entries(realProjects).map(([key, proj]) => (
             <button
@@ -42,7 +50,7 @@ export default function DashboardIAU({ weights }) {
             >
               <div>
                 <span className={`text-[10px] font-bold px-2.5 py-1 rounded-md uppercase ${selectedProjectKey === key ? 'bg-emerald-900 text-emerald-200' : 'bg-slate-200 text-slate-700'}`}>
-                  Verificado Mivivienda
+                  Mivivienda
                 </span>
                 <h4 className="font-extrabold text-base mt-3">{key}</h4>
                 <p className={`text-xs mt-1 ${selectedProjectKey === key ? 'text-emerald-300' : 'text-slate-500'}`}>{proj.direccion}</p>
@@ -52,19 +60,19 @@ export default function DashboardIAU({ weights }) {
         </div>
       </div>
 
-      {/* AQUÍ INSERTAMOS EL MAPA INTERACTIVO Y LOS KPIS */}
+      {/* Mapa y KPIs */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <div className="lg:col-span-7">
           <UrbanMap 
             projectCoords={currentProj} 
             projectName={selectedProjectKey} 
-            services={urbanServicesCoords} 
+            services={currentProj.services} 
           />
         </div>
 
         <div className="lg:col-span-5 grid grid-cols-1 gap-6">
           <div className={`p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between ${result.iauInterpretation.bg}`}>
-            <span className="text-xs font-bold uppercase tracking-wider opacity-70">Índice IVU Final</span>
+            <span className="text-xs font-bold uppercase tracking-wider opacity-70">Índice IVU Calculado (Entorno Real)</span>
             <div className="flex items-baseline gap-2 my-1">
               <p className={`text-5xl font-black ${result.iauInterpretation.color}`}>{result.iauScore}</p>
               <span className="text-sm font-bold opacity-60">/ 100</span>
@@ -73,15 +81,15 @@ export default function DashboardIAU({ weights }) {
           </div>
 
           <div className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs flex flex-col justify-between">
-            <span className="text-xs font-bold text-slate-400 uppercase">Factor Más Favorable</span>
+            <span className="text-xs font-bold text-slate-400 uppercase">Servicio Más Cercano</span>
             <p className="text-lg font-extrabold text-emerald-800 my-1">{result.highestFactor.name}</p>
             <span className="text-xs font-bold text-slate-500 bg-slate-50 px-2 py-1 rounded w-fit">{result.highestFactor.score} pts Normalizados</span>
           </div>
         </div>
       </div>
 
-      {/* Desglose de Factores */}
-      <h2 className="text-xl font-extrabold text-slate-900">Desglose de Servicios Urbanos Cercanos</h2>
+      {/* Desglose de Factores con los nombres reales de los servicios */}
+      <h2 className="text-xl font-extrabold text-slate-900">Desglose de Equipamientos Específicos del Entorno</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {Object.values(result.factorDetails).map(factor => (
           <div key={factor.name} className="bg-white p-6 rounded-3xl border border-slate-200 shadow-xs space-y-4">
@@ -91,6 +99,7 @@ export default function DashboardIAU({ weights }) {
                 ~{factor.distance} metros
               </span>
             </div>
+
             <div>
               <div className="flex justify-between text-xs font-semibold mb-1 text-slate-500">
                 <span>Puntaje Escala</span>
@@ -99,6 +108,10 @@ export default function DashboardIAU({ weights }) {
               <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
                 <div className="bg-emerald-800 h-full rounded-full transition-all duration-500" style={{ width: `${factor.score}%` }}></div>
               </div>
+            </div>
+
+            <div className="text-xs bg-[#F9F8F6] p-3 rounded-2xl border border-slate-100 text-slate-600">
+              <strong>Equipamiento evaluado:</strong> {currentProj.services[factor.key]?.name || 'Zona cercana'}
             </div>
           </div>
         ))}
